@@ -17,6 +17,8 @@ This code uses the following two repositories:
 
 - [DecCom](https://github.com/NikolayBlagoev/DecCom-Python) - for communication between devices (not neccessary for all tests)
 
+- [transformers](https://github.com/NikolayBlagoev/transformers) - a modified version of transformers for training of models with skips
+
 You can install both by cloning the repo and doing ```pip install .``` or by running the [setup.sh](/setup.sh) provided here.
 
 Additionally, you need to install the requirements in [requirements.txt](/requirements.txt) with ```pip install -r requirements.txt```
