@@ -11,13 +11,8 @@ Unlike existing data parallel methods, SkipPipe can accommodate large model trai
 
 ## Requirements
 
-This code uses the following two repositories:
-
-- [simplellm](https://github.com/NikolayBlagoev/simplellm) - for construction of the models, loading datasets, tokenizers, etc.
-
-- [DecCom](https://github.com/NikolayBlagoev/DecCom-Python) - for communication between devices (not neccessary for all tests)
-
-- [transformers](https://github.com/NikolayBlagoev/transformers) - a modified version of transformers for training of models with skips
+This code uses the following three repositories:
+HIDDEN TO PRESERVE THE DOUBLE BLIND PROCESS
 
 You can install both by cloning the repo and doing ```pip install .``` or by running the [setup.sh](/setup.sh) provided here.
 
