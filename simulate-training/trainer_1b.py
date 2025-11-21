@@ -58,11 +58,11 @@ train_ds = RedPyjamav2(tokenizer, batch_size=1, skip = 1000, seq_l=ctx_size, nam
 val_ds = RedPyjamav2(tokenizer, batch_size=1, skip = 0, seq_l=ctx_size, name="sample-1T")
 configuration = LlamaConfig.from_pretrained("meta-llama/Llama-3.2-1B", token = token)
 net = LlamaForCausalLM(configuration).to(device)
-with open("2_communication_8_samples_llama_1B.json","r") as fd:
-    config = json.load(fd)
+# with open("2_communication_8_samples_llama_1B.json","r") as fd:
+#     config = json.load(fd)
 
-paths = config["ca-paths"]
-partitions = config["partitions"]
+# paths = config["ca-paths"]
+# partitions = config["partitions"]
 sleep(rank*10)
 tmp = {}
 for idx, p in enumerate(partitions):
@@ -71,6 +71,7 @@ for idx, p in enumerate(partitions):
 partitions = tmp
 sizes = []
 len_sizes = []
+scaler = torch.amp.GradScaler("cuda" ,enabled=use_amp)
 for param in net.parameters():
     sizes.append(param.shape)
     len_sizes.append(len(param.view(-1)))
@@ -132,31 +133,34 @@ for itr in range(35_001):
                 else:
                     next(train_dl)
         target = x.detach().clone()
-        if skip == 0 or itr % 10 == 0:
-            order = list(range(layers))
-            output = net(x, order = order).logits
-        else:
-            order = [kl for kl in range(layers_per_stage)]
-           
-            mb = paths[str(rank*3 + mb % 3)]
+        with torch.autocast(device_type=device, dtype=torch.float16, enabled=True):
+            if skip == 0 or itr % 10 == 0:
+                order = list(range(layers))
+                output = net(x, order = order).logits
+            else:
+                order = [kl for kl in range(layers_per_stage)]
             
-            for v in mb.values():
-                order += list(range(layers_per_stage * partitions[v], layers_per_stage * (1 + partitions[v])))
-            
-            
+                mb = paths[str(rank*3 + mb % 3)]
+                
+                for v in mb.values():
+                    order += list(range(layers_per_stage * partitions[v], layers_per_stage * (1 + partitions[v])))
+                
+                
 
-            output = net(x, order = order).logits
-        
-        loss = causalLLMLoss(output, target, tokenizer.vocab_size) / mb_c
+                output = net(x, order = order).logits
+            
+            loss = causalLLMLoss(output, target, tokenizer.vocab_size) / mb_c
         loss_hist += loss.item()
-        loss.backward()
+        scaler.scale(loss).backward()
+        
+        # loss.backward()
         del target
         del x
         torch.cuda.empty_cache()
     print(itr,"TRAINING LOSS", loss_hist)
     dist.barrier()
 
-    if itr % 100 != 99:
+    if True:
         tmp = []
         for param in net.parameters():
             if param.grad == None:
@@ -173,16 +177,13 @@ for itr in range(35_001):
         for pi, param in enumerate(net.parameters()):
             param.grad = tmp[pi].view(sizes[pi]).to(device)/world_size
         torch.nn.utils.clip_grad_norm_(net.parameters(),max_norm=1.0)
-        optimizer.step()
+        scaler.step(optimizer)
+        scaler.update()
         del tmp
         optimizer.zero_grad()
         torch.cuda.empty_cache()
-    else:
+    if itr % 100 == 99:
         # AVG PARAMETERS IN CASE OF DIVERGENCE
-        torch.nn.utils.clip_grad_norm_(net.parameters(),max_norm=1.0)
-        optimizer.step()
-        optimizer.zero_grad()
-        torch.cuda.empty_cache()
         tmp = []
         for param in net.parameters():
             if param.data == None:
